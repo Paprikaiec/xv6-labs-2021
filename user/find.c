@@ -3,22 +3,50 @@
 #include "user/user.h"
 #include "kernel/fs.h"
 
-void find(int ppFd, int len, char *name) {
+void find(char* dir, char *name) {
     char buf[512], *p;
     int fd;
     struct dirent de;
     struct stat st;
 
-    char path[len + DIRSIZ];
-    
-    read(ppFd, path, len);
-    fd = open(path, 0);
-    fstat(fd, &st);
+    fd = open(dir, 0);
 
- 
+    strcpy(buf, dir);
+    p = buf+strlen(buf);
+    *p++ = '/';
 
+    while (read(fd, &de, sizeof(de)) == sizeof(de)) {
+        if (de.inum == 0 || !strcmp(de.name, ".") || !strcmp(de.name, "..")) {
+            continue;
+        }
 
+        memmove(p, de.name, DIRSIZ);
+        p[DIRSIZ] = 0;
 
+        if(stat(buf, &st) < 0) {
+            printf("find: cannot stat %s\n", buf);
+            continue;
+        }
+
+        switch (st.type) {
+            case T_FILE:
+                if (!strcmp(de.name, name)) {
+                    printf("%s\n", buf);
+                }
+                break;
+            case T_DIR:
+                if (fork() == 0) {
+                    close(fd);
+                    find(buf, name);
+                    exit(0);
+                }
+                break;
+        }
+    }
+
+    close(fd);
+    while (wait(0) != -1);
+    exit(0);
 }
 
 int main(int argc, char *argv[]) {
@@ -27,42 +55,35 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
-    int pp[2];
-    pipe(pp);
-
     int fd;
     struct stat st;
 
-    if (fork() == 0) {
-        close(pp[1]);
-        find(pp[0], strlen(argv[1]), argv[2]);
-        close(pp[0]);
+    if((fd = open(argv[1], 0)) < 0) {
+        fprintf(2, "find: cannot open %s\n", argv[1]);
         exit(1);
-    } else {
-        close(pp[0]);
-        
-        if((fd = open(argv[1], 0)) < 0) {
-            fprintf(2, "find: cannot open %s\n", argv[1]);
-            exit(1);
-        }
+    }
 
-        if(fstat(fd, &st) < 0) {
-            fprintf(2, "find: cannot stat %s\n", argv[1]);
-            close(fd);
-            exit(1);
-        }
+    if(fstat(fd, &st) < 0) {
+        fprintf(2, "find: cannot stat %s\n", argv[1]);
+        close(fd);
+        exit(1);
+    }
 
-        if (st.type != T_DIR) {
-            fprintf(2, "find: %s should be a dir", argv[1]);
-            close(fd);
-            exit(1);
-        }
+    if (st.type != T_DIR) {
+        fprintf(2, "find: %s should be a dir", argv[1]);
+        close(fd);
+        exit(1);
+    }
 
-        write(pp[1], argv[1], strlen(argv[1]));
-        close(pp[1]);
-        wait(0);
+    if (fork() == 0) {
+        find(argv[1], argv[2]);
+        close(fd);
         exit(0);
     }
+
+    close(fd);
+    wait(0);
+    exit(0);
 
   
 }
