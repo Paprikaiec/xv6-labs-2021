@@ -242,6 +242,8 @@ userinit(void)
   safestrcpy(p->name, "initcode", sizeof(p->name));
   p->cwd = namei("/");
 
+  p->traceNum = 0;
+
   p->state = RUNNABLE;
 
   release(&p->lock);
@@ -302,6 +304,8 @@ fork(void)
   np->cwd = idup(p->cwd);
 
   safestrcpy(np->name, p->name, sizeof(p->name));
+
+  np->traceNum = p->traceNum;
 
   pid = np->pid;
 
@@ -653,4 +657,10 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+int trace(int num) {
+  struct proc *p = myproc();
+  p->traceNum = num;
+  return 0;
 }
