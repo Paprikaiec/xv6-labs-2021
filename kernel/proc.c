@@ -659,8 +659,22 @@ procdump(void)
   }
 }
 
+// fill the traceNum for the given num.
 int trace(int num) {
   struct proc *p = myproc();
   p->traceNum = num;
   return 0;
+}
+
+// Collect the number of processes.
+int numProc(void) {
+  struct proc *p;
+  int num = 0;
+
+  for(p = proc; p < &proc[NPROC]; p++) {
+    if(p->state != UNUSED) {
+      num++;
+    }
+  }
+  return num;  
 }
