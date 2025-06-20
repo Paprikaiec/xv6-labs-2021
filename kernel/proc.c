@@ -141,6 +141,14 @@ found:
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
 
+  // Copyout pid to p->pagetable
+  if (copyout(p->pagetable, USYSCALL, (char*) &p->pid, sizeof(p->pid)) < 0) {
+    freeproc(p);
+    release(&p->lock);
+    return 0;
+  }
+
+
   return p;
 }
 
@@ -172,6 +180,8 @@ pagetable_t
 proc_pagetable(struct proc *p)
 {
   pagetable_t pagetable;
+  struct usyscall* ucall;
+  
 
   // An empty page table.
   pagetable = uvmcreate();
@@ -196,6 +206,21 @@ proc_pagetable(struct proc *p)
     return 0;
   }
 
+   // map the usycall
+  if ((ucall = (struct usyscall*) kalloc()) == 0) {
+    uvmunmap(pagetable, TRAMPOLINE, 1, 0);
+    uvmfree(pagetable, 0);
+    return 0;
+  }
+
+  if (mappages(pagetable, USYSCALL, PGSIZE, 
+               (uint64) ucall, PTE_R | PTE_U) < 0) {
+    uvmunmap(pagetable, TRAMPOLINE, 1, 0);
+    uvmunmap(pagetable, USYSCALL, 1, 0);
+    uvmfree(pagetable, 0);
+    return 0;
+  }
+
   return pagetable;
 }
 
@@ -206,6 +231,7 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz)
 {
   uvmunmap(pagetable, TRAMPOLINE, 1, 0);
   uvmunmap(pagetable, TRAPFRAME, 1, 0);
+  uvmunmap(pagetable, USYSCALL, 1, 0);
   uvmfree(pagetable, sz);
 }
 
@@ -653,4 +679,35 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+int pgaccess(uint64 srcva, int pgNum, uint64 dstva) {
+  pagetable_t pagetable, searchPage;
+  unsigned int mask;
+
+  pagetable = myproc()->pagetable;
+  searchPage = pagetable;
+
+  mask = 0;
+
+  for(int level = 2; level > 0; level--) {
+    pte_t *pte = &searchPage[PX(level, srcva)];
+    if(*pte & PTE_V) {
+      searchPage = (pagetable_t)PTE2PA(*pte);
+    } else {
+      return -1;
+    }
+  }
+
+  for (int i = 0; i < pgNum; i++) {
+    pte_t *pte = &searchPage[PX(0, srcva)] + i;
+    if (*pte & PTE_A) {
+      mask = mask | (1 << i);
+      *pte = *pte & ~PTE_A;
+    }
+  }
+
+   return copyout(pagetable, dstva, (char*) &mask, sizeof(mask)); 
+  
+
 }
