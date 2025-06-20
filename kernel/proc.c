@@ -699,6 +699,10 @@ int pgaccess(uint64 srcva, int pgNum, uint64 dstva) {
     }
   }
 
+  if (PX(0, srcva) + pgNum > PGENTRY) {
+    return -1;
+  }
+  
   for (int i = 0; i < pgNum; i++) {
     pte_t *pte = &searchPage[PX(0, srcva)] + i;
     if (*pte & PTE_A) {
@@ -707,7 +711,6 @@ int pgaccess(uint64 srcva, int pgNum, uint64 dstva) {
     }
   }
 
-   return copyout(pagetable, dstva, (char*) &mask, sizeof(mask)); 
+  return copyout(pagetable, dstva, (char*) &mask, sizeof(mask)); 
   
-
 }
