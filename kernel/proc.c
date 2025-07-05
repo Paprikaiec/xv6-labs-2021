@@ -175,6 +175,13 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+
+  if (p->ticktrapframe)
+    kfree((void *)p->ticktrapframe);
+  p->tickHandler = 0;
+  p->tickPeriod = 0;
+  p->ticks = 0;
+  
 }
 
 // Create a user page table for a given process,
