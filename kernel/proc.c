@@ -141,6 +141,17 @@ found:
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
 
+  // Initialize ticks and period to be 0 
+  p->ticks = 0;
+  p->tickPeriod =0;
+
+  // Alloc space for alarm to store last trapframe.
+  if((p->ticktrapframe = (struct trapframe *)kalloc()) == 0){
+    freeproc(p);
+    release(&p->lock);
+    return 0;
+  }
+
   return p;
 }
 
@@ -653,4 +664,18 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+int sigalarm(int tickPeriod, uint64 handler) {
+  struct proc *p = myproc();
+  p->tickPeriod = tickPeriod;
+  p->tickHandler = handler;
+  return 0;
+}
+
+int sigreturn() {
+  struct proc *p= myproc();
+  memmove(p->trapframe, p->ticktrapframe, PGSIZE);
+  p->ticks = 0;
+  return 0;
 }
