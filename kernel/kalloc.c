@@ -23,11 +23,15 @@ struct {
   struct run *freelist;
 } kmem;
 
+uint8 COWcount[COWREF(PHYSTOP)];
+
 void
 kinit()
 {
   initlock(&kmem.lock, "kmem");
   freerange(end, (void*)PHYSTOP);
+  for (int i = 0; i < COWREF(PHYSTOP); i++)
+    COWcount[i] = 0;
 }
 
 void
@@ -46,20 +50,24 @@ freerange(void *pa_start, void *pa_end)
 void
 kfree(void *pa)
 {
-  struct run *r;
+  if (COWcount[COWREF((uint64) pa)]  == 0) {
+    struct run *r;
+    if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
+      panic("kfree");
 
-  if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
-    panic("kfree");
+    // Fill with junk to catch dangling refs.
+    memset(pa, 1, PGSIZE);
 
-  // Fill with junk to catch dangling refs.
-  memset(pa, 1, PGSIZE);
+    r = (struct run*)pa;
 
-  r = (struct run*)pa;
-
-  acquire(&kmem.lock);
-  r->next = kmem.freelist;
-  kmem.freelist = r;
-  release(&kmem.lock);
+    acquire(&kmem.lock);
+    r->next = kmem.freelist;
+    kmem.freelist = r;
+    release(&kmem.lock);
+  } else {
+    COWcount[COWREF((uint64) pa)] --;
+  }
+  
 }
 
 // Allocate one 4096-byte page of physical memory.
@@ -76,7 +84,9 @@ kalloc(void)
     kmem.freelist = r->next;
   release(&kmem.lock);
 
-  if(r)
+  if(r) {
     memset((char*)r, 5, PGSIZE); // fill with junk
+    COWcount[COWREF((uint64) r)] ++;
+  }
   return (void*)r;
 }
