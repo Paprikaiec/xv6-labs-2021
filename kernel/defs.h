@@ -63,6 +63,8 @@ void            ramdiskrw(struct buf*);
 void*           kalloc(void);
 void            kfree(void *);
 void            kinit(void);
+void            addCowOne(uint64);
+// uint8           readCow(uint64);
 
 // log.c
 void            initlog(int, struct superblock*);

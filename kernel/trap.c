@@ -66,7 +66,7 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
-  } else if ((r_scause() == 12)  && (r_stval() & PTE_COW)) {
+  } else if ((r_scause() == 15) && (*walk(p->pagetable, r_stval(), 0) & PTE_COW)) {
     // start true copy pagetable for COW
     pte_t *pte;
     uint64 pa, i;
@@ -74,24 +74,28 @@ usertrap(void)
     char *mem;
 
     for(i = 0; i < p->sz; i += PGSIZE) {
-      if((pte = walk(p->pagetable, i, 0)) == 0)
+      if((pte = walk(p->pagetable, i, 0)) == 0) {
         p->killed = 1;
-      if((*pte & PTE_V) == 0)
+        break;
+      }
+      if((*pte & PTE_V) == 0) {
         p->killed = 1;
+        break;
+      }
       pa = PTE2PA(*pte);
       *pte = *pte | PTE_W;
       flags = PTE_FLAGS(*pte);
       if((mem = kalloc()) == 0) {
         uvmunmap(p->pagetable, 0, i / PGSIZE, 1);
         p->killed = 1;
-        exit(-1);
+        break;
       }
         
       memmove(mem, (char*)pa, PGSIZE);
       if(mappages(p->pagetable, i, PGSIZE, (uint64)mem, flags) != 0){
         uvmunmap(p->pagetable, 0, i / PGSIZE, 1);
         p->killed = 1;
-        exit(-1);
+        break;
     }
   }
 

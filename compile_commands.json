@@ -1,0 +1,29 @@
+[
+    {
+        "arguments": [
+            "riscv64-linux-gnu-gcc",
+            "-c",
+            "-Wall",
+            "-Werror",
+            "-O",
+            "-fno-omit-frame-pointer",
+            "-ggdb",
+            "-DSOL_COW",
+            "-DLAB_COW",
+            "-mcmodel=medany",
+            "-ffreestanding",
+            "-fno-common",
+            "-nostdlib",
+            "-mno-relax",
+            "-I.",
+            "-fno-stack-protector",
+            "-fno-pie",
+            "-no-pie",
+            "-o",
+            "user/cowtest.o",
+            "user/cowtest.c"
+        ],
+        "directory": "/home/wyw/xv6-labs-2021",
+        "file": "user/cowtest.c"
+    }
+]
