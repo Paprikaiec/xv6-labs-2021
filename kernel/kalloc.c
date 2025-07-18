@@ -28,11 +28,19 @@ struct{
   uint8 count[COWREF(PHYSTOP)];
 } COW;
 
+void addCOWCount(uint64 pa) {
+  acquire(&COW.lock);
+  COW.count[COWREF(pa)] ++;
+  release(&COW.lock);
+}
+
+
 
 void
 kinit()
 {
   initlock(&kmem.lock, "kmem");
+  initlock(&COW.lock, "COW");
 
   acquire(&COW.lock);
   for (int i = 0; i < COWREF(PHYSTOP); i++)
@@ -58,12 +66,11 @@ void
 kfree(void *pa)
 {
   uint8 count;
-
   acquire(&COW.lock);
   COW.count[COWREF((uint64) pa)] --;
   count = COW.count[COWREF((uint64) pa)];
   release(&COW.lock);
-
+  
   if (count == 0) {
     struct run *r;
     if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
@@ -105,18 +112,3 @@ kalloc(void)
   }
   return (void*)r;
 }
-
-void addCowOne(uint64 pa) {
-  acquire(&COW.lock);
-  COW.count[COWREF(pa)] ++;
-  release(&COW.lock);
-}
-
-// uint8 readCow(uint64 pa) {
-//   uint8 count;
-//   acquire(&COW.lock);
-//   count = COW.count[COWREF(pa)];
-//   release(&COW.lock);
-
-//   return count;
-// }
