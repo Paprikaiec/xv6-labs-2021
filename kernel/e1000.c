@@ -102,6 +102,34 @@ e1000_transmit(struct mbuf *m)
   // the TX descriptor ring so that the e1000 sends it. Stash
   // a pointer so that it can be freed after sending.
   //
+
+  acquire(&e1000_lock);
+  int pos = regs[E1000_TDT]; // Look for current transmit descrptior tail.
+  release(&e1000_lock);
+
+  // If not put TDT to FIFO, overflow, see 3.3.3.1 
+  if (!(tx_ring[pos].status & E1000_TXD_STAT_DD)) 
+    return -1;
+  
+
+  // free mbuf
+  if (tx_mbufs[pos]) {
+    mbuffree(tx_mbufs[pos]);
+    tx_mbufs[pos] = 0;
+  }
+    
+  // Set TX descptior.
+  tx_ring[pos].addr = (uint64)m->head;
+  tx_mbufs[pos] = m;
+  tx_ring[pos].length = m->len;
+  tx_ring[pos].status = 0;
+
+  // Because filewrite only write 1 mbuf, not mbufq, and no changes to m->next, so always set EOP bit.
+  tx_ring[pos].cmd = E1000_TXD_CMD_RS | E1000_TXD_CMD_EOP; 
+
+  acquire(&e1000_lock);
+  regs[E1000_TDT] = (pos + 1) % TX_RING_SIZE;
+  release(&e1000_lock);
   
   return 0;
 }
@@ -115,6 +143,35 @@ e1000_recv(void)
   // Check for packets that have arrived from the e1000
   // Create and deliver an mbuf for each packet (using net_rx()).
   //
+
+  while (1) {
+
+    acquire(&e1000_lock);
+    int pos = (regs[E1000_RDT] + 1) % RX_RING_SIZE;
+    release(&e1000_lock);
+
+    if (!(rx_ring[pos].status & E1000_RXD_STAT_DD)) 
+      break;
+
+    rx_mbufs[pos]->len = rx_ring[pos].length;
+
+    net_rx(rx_mbufs[pos]);
+
+    rx_mbufs[pos] = mbufalloc(0);
+    if (!rx_mbufs[pos])
+      panic("e1000");
+    rx_ring[pos].addr = (uint64) rx_mbufs[pos]->head;
+    rx_ring[pos].status = 0;
+
+    acquire(&e1000_lock);
+    regs[E1000_RDT] = pos;
+    release(&e1000_lock);
+
+    if (rx_ring[pos].status & E1000_RXD_STAT_EOP) 
+      break;
+  }
+  
+  
 }
 
 void
